@@ -1,0 +1,257 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mongodb"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id             String          @id @default(auto()) @map("_id") @db.ObjectId
+  email          String          @unique
+  password       String
+  role           Role
+  firstName      String
+  lastName       String
+  displayName    String
+  gender         Gender
+  balance        Float           @default(0.0)
+  birthdate      DateTime
+  phoneNumber    String
+  isVerified     Boolean         @default(true)
+  imageURL       String          @default("https://utfs.io/f/4a65c7f9-7bb1-4498-99bb-4148be482108-t9vzc5.png")
+  paymentMethods PaymentMethod[] @relation("ownPaymentMethod")
+  dorms          Dorm[]          @relation("ownDorm")
+  bookings       Booking[]       @relation("makeReserve")
+  transactions   Transaction[]   @relation("makeTransaction")
+  chatA          Chat[]          @relation("joinChatAsParticipantA")
+  chatB          Chat[]          @relation("joinChatAsParticipantB")
+  myMessages     Message[]       @relation("sendMessage")
+  reviews        Review[]        @relation("reviewDorm")
+  issues         Issue[]         @relation("reportIssue")
+  resolvedIssues Issue[]         @relation("resolveIssue")
+}
+
+model PaymentMethod {
+  id     String            @id @default(auto()) @map("_id") @db.ObjectId
+  user   User              @relation("ownPaymentMethod", fields: [userId], references: [id], onDelete: Cascade)
+  userId String            @db.ObjectId
+  type   PaymentMethodType
+  info   String
+}
+
+model Dorm {
+  id             String     @id @default(auto()) @map("_id") @db.ObjectId
+  name           String
+  description    String
+  provider       User       @relation("ownDorm", fields: [providerId], references: [id], onDelete: Cascade)
+  providerId     String     @db.ObjectId
+  address        String
+  latitude       Float
+  longitude      Float
+  dormFacilities String[]
+  contractNumber String
+  images         String[]
+  roomTypes      RoomType[] @relation("roomInDorm")
+  reviews        Review[]   @relation("hasReviews")
+}
+
+model RoomType {
+  id                    String           @id @default(auto()) @map("_id") @db.ObjectId
+  dorm                  Dorm             @relation("roomInDorm", fields: [dormId], references: [id], onDelete: Cascade)
+  dormId                String           @db.ObjectId
+  name                  String
+  description           String
+  size                  Int
+  cost                  Float
+  capacity              Int
+  roomFacilities        RoomFacilities[]
+  numberOfRoom          Int              @default(0)
+  numberOfAvailableRoom Int              @default(0)
+  images                String[]
+  bookings              Booking[]        @relation("reserveAt")
+}
+
+model Booking {
+  id            String        @id @default(auto()) @map("_id") @db.ObjectId
+  customer      User          @relation("makeReserve", fields: [customerId], references: [id], onDelete: Cascade)
+  customerId    String        @db.ObjectId
+  roomType      RoomType      @relation("reserveAt", fields: [roomTypeId], references: [id], onDelete: Cascade)
+  roomTypeId    String        @db.ObjectId
+  price         Float
+  status        BookingStatus @default(Pending)
+  startAt       DateTime
+  endAt         DateTime
+  checkoutToken String        @unique @default(uuid())
+  transaction   Transaction?  @relation("containTransaction", fields: [transactionId], references: [id], onDelete: Cascade)
+  transactionId String?       @db.ObjectId
+  bookAt        DateTime      @default(now())
+}
+
+model Transaction {
+  id          String          @id @default(auto()) @map("_id") @db.ObjectId
+  type        TransactionType
+  user        User            @relation("makeTransaction", fields: [userId], references: [id], onDelete: Cascade)
+  userId      String          @db.ObjectId
+  price       Float
+  description String
+  createAt    DateTime        @default(now())
+  booking     Booking[]       @relation("containTransaction")
+}
+
+model Chat {
+  id                 String    @id @default(auto()) @map("_id") @db.ObjectId
+  participantA       User      @relation("joinChatAsParticipantA", fields: [participantAId], references: [id], onDelete: Cascade)
+  participantAId     String    @db.ObjectId
+  participantB       User      @relation("joinChatAsParticipantB", fields: [participantBId], references: [id], onDelete: Cascade)
+  participantBId     String    @db.ObjectId
+  participantAUnread Int       @default(0)
+  participantBUnread Int       @default(0)
+  messages           Message[] @relation("containMessages")
+  lastUpdated        DateTime  @default(now())
+}
+
+model GroupChat {
+  id        String  @id @default(auto()) @map("_id") @db.ObjectId
+  groupName String
+  imageURL  String?
+}
+
+model Message {
+  id        String      @id @default(auto()) @map("_id") @db.ObjectId
+  chat      Chat        @relation("containMessages", fields: [chatId], references: [id], onDelete: Cascade)
+  chatId    String      @db.ObjectId
+  sender    User        @relation("sendMessage", fields: [senderId], references: [id], onDelete: Cascade)
+  senderId  String      @db.ObjectId
+  type      MessageType
+  text      String?
+  pictures  String[]
+  latitude  Float?
+  longitude Float?
+  sentAt    DateTime    @default(now())
+}
+
+model Review {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  customer    User     @relation("reviewDorm", fields: [customerId], references: [id], onDelete: Cascade)
+  customerId  String   @db.ObjectId
+  dorm        Dorm     @relation("hasReviews", fields: [dormId], references: [id], onDelete: Cascade)
+  dormId      String   @db.ObjectId
+  rating      Int
+  description String
+  images      String[]
+  reviewAt    DateTime @default(now())
+
+  @@unique([customerId, dormId])
+}
+
+model Issue {
+  id             String      @id @default(auto()) @map("_id") @db.ObjectId
+  user           User        @relation("reportIssue", fields: [userId], references: [id], onDelete: Cascade)
+  userId         String      @db.ObjectId
+  type           IssueType
+  status         IssueStatus @default(Waiting)
+  title          String
+  description    String
+  images         String[]
+  reportAt       DateTime    @default(now())
+  resolver       User?       @relation("resolveIssue", fields: [resolverId], references: [id], onDelete: Cascade)
+  resolverId     String?     @db.ObjectId
+  resolveMessage String?
+  resolveAt      DateTime?
+}
+
+enum PaymentMethodType {
+  Bank
+  Card
+}
+
+enum Gender {
+  Male
+  Female
+  Other
+}
+
+enum Role {
+  Customer
+  Provider
+  Admin
+}
+
+enum DormFacilities {
+  pet
+  wifi
+  parking
+  elevator
+  fitness
+  swimming
+  shuttle
+  laundry
+  guard
+  keycard
+  fingerprint
+  television
+  cctv
+  coworking
+  kitchen
+  smoking
+  vending
+  dispenser
+  frontdesk
+}
+
+enum RoomFacilities {
+  singlebed
+  bunkbed
+  table
+  closet
+  drawer
+  bedsidetable
+  curtain
+  bin
+  airconditioner
+  waterheater
+  fan
+  television
+  refrig
+  kettle
+  microwave
+  toilet
+}
+
+enum BookingStatus {
+  Pending
+  PaymentPending
+  Confirmed
+  Completed
+  Cancelled
+}
+
+enum MessageType {
+  Text
+  Images
+  Location
+}
+
+enum TransactionType {
+  BookingPayment
+  WalletDeposit
+  WalletWithdrawn
+}
+
+enum IssueType {
+  Technical
+  Account
+  Content
+  Payment
+  Security
+  Suggestion
+  Other
+}
+
+enum IssueStatus {
+  Waiting
+  Resolved
+  Rejected
+}
